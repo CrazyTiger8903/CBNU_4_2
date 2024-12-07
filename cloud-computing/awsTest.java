@@ -1,5 +1,7 @@
 package aws;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 /*
 * Cloud Computing
 * 
@@ -53,7 +55,7 @@ public class awsTest {
 		}
 		ec2 = AmazonEC2ClientBuilder.standard()
 			.withCredentials(credentialsProvider)
-			.withRegion("us-east-1")	/* check the region at AWS console */
+			.withRegion("us-east-1")	
 			.build();
 	}
 
@@ -146,6 +148,14 @@ public class awsTest {
 				listImages();
 				break;
 
+			case 9: // condor_status 실행
+				System.out.print("Enter instance id: ");
+				if (id_string.hasNext())
+					instance_id = id_string.nextLine();
+				if (!instance_id.trim().isEmpty())
+					executeCondorStatus(instance_id);
+				break;
+				
 			case 99: 
 				System.out.println("bye!");
 				menu.close();
@@ -343,5 +353,59 @@ public class awsTest {
 		}
 		
 	}
+
+
+
+
+	// condor_status 추가
+	private static String getPublicDns(String instanceId) {
+        DescribeInstancesRequest request = new DescribeInstancesRequest().withInstanceIds(instanceId);
+        DescribeInstancesResult response = ec2.describeInstances(request);
+
+        for (Reservation reservation : response.getReservations()) {
+            for (Instance instance : reservation.getInstances()) {
+                return instance.getPublicDnsName();
+            }
+        }
+        return null;
+    }
+
+    private static void executeCondorStatus(String instanceId) {
+        try {
+            String publicDns = getPublicDns(instanceId);
+            if (publicDns == null || publicDns.isEmpty()) {
+                System.out.println("Public DNS not found for instance: " + instanceId);
+                return;
+            }
+
+            System.out.println("Connecting to instance: " + publicDns);
+
+			ProcessBuilder processBuilder = new ProcessBuilder(
+				"ssh", "-i", "path to ssh key path",
+				"-o", "StrictHostKeyChecking=no", 
+				"ec2-user@" + publicDns,
+				"condor_status"
+			);
+			
+            processBuilder.redirectErrorStream(true);
+            Process process = processBuilder.start();
+
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                System.out.println(line);
+            }
+
+            int exitCode = process.waitFor();
+            if (exitCode == 0) {
+                System.out.println("condor_status executed successfully.");
+            } else {
+                System.out.println("Error while executing condor_status. Exit code: " + exitCode);
+            }
+        } catch (Exception e) {
+            System.out.println("Error: " + e.getMessage());
+        }
+    }
+
 }
 	
