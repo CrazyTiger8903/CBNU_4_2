@@ -37,6 +37,13 @@ import com.amazonaws.services.ec2.model.DescribeImagesResult;
 import com.amazonaws.services.ec2.model.Image;
 import com.amazonaws.services.ec2.model.Filter;
 
+// 태그 추가
+import com.amazonaws.services.ec2.model.Tag; 
+import com.amazonaws.services.ec2.model.CreateTagsRequest;
+import com.amazonaws.services.ec2.model.DeleteTagsRequest;  
+
+
+
 public class awsTest {
 
 	static AmazonEC2      ec2;
@@ -55,7 +62,7 @@ public class awsTest {
 		}
 		ec2 = AmazonEC2ClientBuilder.standard()
 			.withCredentials(credentialsProvider)
-			.withRegion("us-east-1")	
+			.withRegion("us-east-1")	/* check the region at AWS console */
 			.build();
 	}
 
@@ -69,18 +76,19 @@ public class awsTest {
 		
 		while(true)
 		{
-			System.out.println("                                                            ");
-			System.out.println("                                                            ");
-			System.out.println("------------------------------------------------------------");
-			System.out.println("           Amazon AWS Control Panel using SDK               ");
-			System.out.println("------------------------------------------------------------");
-			System.out.println("  1. list instance                2. available zones        ");
-			System.out.println("  3. start instance               4. available regions      ");
-			System.out.println("  5. stop instance                6. create instance        ");
-			System.out.println("  7. reboot instance              8. list images            ");
-			System.out.println("  9. execute condor_status                                  ");
-			System.out.println("                                 99. quit                   ");
-			System.out.println("------------------------------------------------------------");
+			System.out.println("                                                              ");
+			System.out.println("                                                              ");
+			System.out.println("--------------------------------------------------------------");
+			System.out.println("           Amazon AWS Control Panel using SDK                 ");
+			System.out.println("--------------------------------------------------------------");
+			System.out.println("  1. list instance                2. available zones          ");
+			System.out.println("  3. start instance               4. available regions        ");
+			System.out.println("  5. stop instance                6. create instance          ");
+			System.out.println("  7. reboot instance              8. list images              ");
+			System.out.println("  9. execute condor_status        10. list instances by tag   ");
+			System.out.println(" 11. add tag to instance          12. delete tag from instance");
+			System.out.println("                                  99. quit                     ");
+			System.out.println("--------------------------------------------------------------");
 			
 			System.out.print("Enter an integer: ");
 			
@@ -148,12 +156,56 @@ public class awsTest {
 				listImages();
 				break;
 
-			case 9: // condor_status 실행
+			case 9: 
 				System.out.print("Enter instance id: ");
 				if (id_string.hasNext())
 					instance_id = id_string.nextLine();
 				if (!instance_id.trim().isEmpty())
 					executeCondorStatus(instance_id);
+				break;
+
+				case 10:
+				System.out.print("Enter tag key: ");
+				String tagKey = id_string.nextLine().trim();
+				
+				System.out.print("Enter tag value: ");
+				String tagValue = id_string.nextLine().trim();
+				
+				if (!tagKey.isEmpty() && !tagValue.isEmpty()) {
+					listInstancesByTag(tagKey, tagValue);
+				} else {
+					System.out.println("Tag key or value is empty. Returning to main menu.");
+				}
+				break;
+				
+			case 11:
+				System.out.print("Enter instance id: ");
+				String tagAddInstanceId = id_string.nextLine().trim();
+				System.out.print("Enter tag key: ");
+				String addTagKey = id_string.nextLine().trim();
+				System.out.print("Enter tag value: ");
+				String addTagValue = id_string.nextLine().trim();
+				
+				if(!tagAddInstanceId.isEmpty() && !addTagKey.isEmpty() && !addTagValue.isEmpty()) {
+					addTagToInstance(tagAddInstanceId, addTagKey, addTagValue);
+				} else {
+					System.out.println("Instance id or tag key/value is empty. Returning to main menu.");
+				}
+				break;
+				
+			case 12:
+				System.out.print("Enter instance id: ");
+				String tagDelInstanceId = id_string.nextLine().trim();
+				System.out.print("Enter tag key: ");
+				String delTagKey = id_string.nextLine().trim();
+				System.out.print("Enter tag value: ");
+				String delTagValue = id_string.nextLine().trim();
+				
+				if(!tagDelInstanceId.isEmpty() && !delTagKey.isEmpty() && !delTagValue.isEmpty()) {
+					deleteTagFromInstance(tagDelInstanceId, delTagKey, delTagValue);
+				} else {
+					System.out.println("Instance id or tag key/value is empty. Returning to main menu.");
+				}
 				break;
 				
 			case 99: 
@@ -191,7 +243,21 @@ public class awsTest {
 						instance.getInstanceType(),
 						instance.getState().getName(),
 						instance.getMonitoring().getState());
+
+					// 태그가 존재한다면 태그 출력
+					if (instance.getTags() != null && !instance.getTags().isEmpty()) {
+						System.out.print(", [tags] ");
+						for (int i = 0; i < instance.getTags().size(); i++) {
+							String tagKey = instance.getTags().get(i).getKey();
+							String tagValue = instance.getTags().get(i).getValue();
+							System.out.printf("%s=%s", tagKey, tagValue);
+							if (i < instance.getTags().size() - 1) {
+								System.out.print(", ");
+							}
+						}
+					}
 				}
+
 				System.out.println();
 			}
 
@@ -356,15 +422,13 @@ public class awsTest {
 
 
 
-
-	// condor_status 추가
 	private static String getPublicDns(String instanceId) {
         DescribeInstancesRequest request = new DescribeInstancesRequest().withInstanceIds(instanceId);
         DescribeInstancesResult response = ec2.describeInstances(request);
 
         for (Reservation reservation : response.getReservations()) {
             for (Instance instance : reservation.getInstances()) {
-                return instance.getPublicDnsName();
+                return instance.getPublicDnsName(); 
             }
         }
         return null;
@@ -380,8 +444,9 @@ public class awsTest {
 
             System.out.println("Connecting to instance: " + publicDns);
 
+
 			ProcessBuilder processBuilder = new ProcessBuilder(
-				"ssh", "-i", "path to ssh key path",
+				"ssh", "-i", "key.pem",
 				"-o", "StrictHostKeyChecking=no", 
 				"ec2-user@" + publicDns,
 				"condor_status"
@@ -406,6 +471,59 @@ public class awsTest {
             System.out.println("Error: " + e.getMessage());
         }
     }
+
+
+	// 태그
+	public static void listInstancesByTag(String key, String value) {
+		System.out.printf("Listing instances with tag [%s=%s]....\n", key, value);
+
+		DescribeInstancesRequest request = new DescribeInstancesRequest()
+				.withFilters(new Filter().withName("tag:" + key).withValues(value));
+
+		boolean done = false;
+
+		while (!done) {
+			DescribeInstancesResult response = ec2.describeInstances(request);
+
+			boolean found = false;
+			for (Reservation reservation : response.getReservations()) {
+				for (Instance instance : reservation.getInstances()) {
+					System.out.printf("[id] %s, [AMI] %s, [type] %s, [state] %10s, [monitoring state] %s\n",
+							instance.getInstanceId(), instance.getImageId(), instance.getInstanceType(),
+							instance.getState().getName(), instance.getMonitoring().getState());
+					found = true;
+				}
+			}
+
+			if (!found) {
+				System.out.println("No instances found with the given tag.");
+			}
+
+			request.setNextToken(response.getNextToken());
+			if (response.getNextToken() == null) {
+				done = true;
+			}
+		}
+	}
+
+	public static void addTagToInstance(String instanceId, String tagKey, String tagValue) {
+		Tag tag = new Tag(tagKey, tagValue);
+		CreateTagsRequest createTagsRequest = new CreateTagsRequest()
+				.withResources(instanceId)
+				.withTags(tag);
+		ec2.createTags(createTagsRequest);
+		System.out.printf("Successfully added tag [%s=%s] to instance %s\n", tagKey, tagValue, instanceId);
+	}
+
+	public static void deleteTagFromInstance(String instanceId, String tagKey, String tagValue) {
+		Tag tag = new Tag(tagKey, tagValue);
+		DeleteTagsRequest deleteTagsRequest = new DeleteTagsRequest()
+				.withResources(instanceId)
+				.withTags(tag);
+		ec2.deleteTags(deleteTagsRequest);
+		System.out.printf("Successfully deleted tag [%s=%s] from instance %s\n", tagKey, tagValue, instanceId);
+	}
+
 
 }
 	
