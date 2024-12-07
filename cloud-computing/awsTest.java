@@ -2,15 +2,13 @@ package aws;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
-/*
-* Cloud Computing
-* 
-* Dynamic Resource Management Tool
-* using AWS Java SDK Library
-* 
-*/
+
 import java.util.Iterator;
+import java.util.List;
 import java.util.Scanner;
+import java.util.Date;
+import java.util.concurrent.TimeUnit;
+
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.auth.profile.ProfileCredentialsProvider;
@@ -42,11 +40,28 @@ import com.amazonaws.services.ec2.model.Tag;
 import com.amazonaws.services.ec2.model.CreateTagsRequest;
 import com.amazonaws.services.ec2.model.DeleteTagsRequest;  
 
-
+import com.amazonaws.services.cloudwatch.AmazonCloudWatch; 
+import com.amazonaws.services.cloudwatch.AmazonCloudWatchClientBuilder; 
+import com.amazonaws.services.cloudwatch.model.Datapoint; 
+import com.amazonaws.services.cloudwatch.model.GetMetricStatisticsRequest; 
+import com.amazonaws.services.cloudwatch.model.GetMetricStatisticsResult; 
+import com.amazonaws.services.cloudwatch.model.Statistic; 
+import com.amazonaws.services.cloudwatch.model.PutMetricAlarmRequest;  
+import com.amazonaws.services.cloudwatch.model.StandardUnit;          
+import com.amazonaws.services.logs.AWSLogs; 
+import com.amazonaws.services.logs.AWSLogsClientBuilder; 
+import com.amazonaws.services.cloudwatch.model.DescribeAlarmsRequest; 
+import com.amazonaws.services.cloudwatch.model.DescribeAlarmsResult;  
+import com.amazonaws.services.cloudwatch.model.MetricAlarm;          
+import com.amazonaws.services.cloudwatch.model.Dimension; 
+import com.amazonaws.services.cloudwatch.model.DeleteAlarmsRequest;
 
 public class awsTest {
 
 	static AmazonEC2      ec2;
+	
+	static AmazonCloudWatch cloudWatch;
+	static AWSLogs awsLogs; 
 
 	private static void init() throws Exception {
 
@@ -62,8 +77,21 @@ public class awsTest {
 		}
 		ec2 = AmazonEC2ClientBuilder.standard()
 			.withCredentials(credentialsProvider)
-			.withRegion("us-east-1")	/* check the region at AWS console */
+			.withRegion("us-east-1")	
 			.build();
+
+		
+		cloudWatch = AmazonCloudWatchClientBuilder.standard()
+				.withCredentials(credentialsProvider)
+				.withRegion("us-east-1")
+				.build();
+
+		: CloudWatch Logs 클라이언트 초기화
+		awsLogs = AWSLogsClientBuilder.standard()
+				.withCredentials(credentialsProvider)
+				.withRegion("us-east-1")
+				.build();
+
 	}
 
 	public static void main(String[] args) throws Exception {
@@ -87,6 +115,11 @@ public class awsTest {
 			System.out.println("  7. reboot instance              8. list images              ");
 			System.out.println("  9. execute condor_status        10. list instances by tag   ");
 			System.out.println(" 11. add tag to instance          12. delete tag from instance");
+			System.out.println(" 30. get EC2 CPUUtilization metrics                           ");
+			System.out.println(" 31. create CPU alarm for instance                            "); 
+			System.out.println(" 33. check alarm state                                          "); 
+			System.out.println(" 34. list alarms                                             "); 
+			System.out.println(" 35. delete alarm                                            "); 
 			System.out.println("                                  99. quit                     ");
 			System.out.println("--------------------------------------------------------------");
 			
@@ -156,6 +189,7 @@ public class awsTest {
 				listImages();
 				break;
 
+			// condor_status 실행
 			case 9: 
 				System.out.print("Enter instance id: ");
 				if (id_string.hasNext())
@@ -178,6 +212,7 @@ public class awsTest {
 				}
 				break;
 				
+		
 			case 11:
 				System.out.print("Enter instance id: ");
 				String tagAddInstanceId = id_string.nextLine().trim();
@@ -193,6 +228,7 @@ public class awsTest {
 				}
 				break;
 				
+	
 			case 12:
 				System.out.print("Enter instance id: ");
 				String tagDelInstanceId = id_string.nextLine().trim();
@@ -207,7 +243,65 @@ public class awsTest {
 					System.out.println("Instance id or tag key/value is empty. Returning to main menu.");
 				}
 				break;
+		
 				
+
+			
+			case 30:
+				System.out.print("Enter instance id for CPU metric: ");
+				String metricInstanceId = id_string.nextLine().trim();
+				if (!metricInstanceId.isEmpty()) {
+					getEC2CPUUtilization(metricInstanceId);
+				} else {
+					System.out.println("Instance id is empty. Returning to main menu.");
+				}
+				break;
+
+			case 31: 
+				System.out.print("Enter instance id for alarm: ");
+				String alarmInstanceId = id_string.nextLine().trim();
+				System.out.print("Enter alarm name: ");
+				String alarmName = id_string.nextLine().trim();
+				System.out.print("Enter CPU threshold (%): ");
+				String thresholdStr = id_string.nextLine().trim();
+
+				if (!alarmInstanceId.isEmpty() && !alarmName.isEmpty() && !thresholdStr.isEmpty()) {
+					try {
+						double threshold = Double.parseDouble(thresholdStr);
+						createCPUAlarmForInstance(alarmInstanceId, alarmName, threshold);
+					} catch (NumberFormatException e) {
+						System.out.println("Invalid threshold input. Please enter a number.");
+					}
+				} else {
+					System.out.println("Missing alarm parameters. Returning to main menu.");
+				}
+				break;
+
+			case 33:
+				System.out.print("Enter alarm name: ");
+				String checkAlarmName = id_string.nextLine().trim();
+				if (!checkAlarmName.isEmpty()) {
+					checkAlarmState(checkAlarmName);
+				} else {
+					System.out.println("Alarm name is empty. Returning to main menu.");
+				}
+				break;
+
+			case 34: 
+				listAlarms();
+				break;
+			
+			case 35: 
+				System.out.print("Enter alarm name to delete: ");
+				String alarmToDelete = id_string.nextLine().trim();
+				if (!alarmToDelete.isEmpty()) {
+					deleteAlarm(alarmToDelete);
+				} else {
+					System.out.println("Alarm name is empty. Returning to main menu.");
+				}
+				break;
+			
+
 			case 99: 
 				System.out.println("bye!");
 				menu.close();
@@ -244,7 +338,7 @@ public class awsTest {
 						instance.getState().getName(),
 						instance.getMonitoring().getState());
 
-					// 태그가 존재한다면 태그 출력
+					
 					if (instance.getTags() != null && !instance.getTags().isEmpty()) {
 						System.out.print(", [tags] ");
 						for (int i = 0; i < instance.getTags().size(); i++) {
@@ -422,17 +516,20 @@ public class awsTest {
 
 
 
+
+
 	private static String getPublicDns(String instanceId) {
         DescribeInstancesRequest request = new DescribeInstancesRequest().withInstanceIds(instanceId);
         DescribeInstancesResult response = ec2.describeInstances(request);
 
         for (Reservation reservation : response.getReservations()) {
             for (Instance instance : reservation.getInstances()) {
-                return instance.getPublicDnsName(); 
+                return instance.getPublicDnsName(); // Return the Public DNS of the instance
             }
         }
         return null;
     }
+
 
     private static void executeCondorStatus(String instanceId) {
         try {
@@ -451,10 +548,12 @@ public class awsTest {
 				"ec2-user@" + publicDns,
 				"condor_status"
 			);
+
 			
             processBuilder.redirectErrorStream(true);
             Process process = processBuilder.start();
 
+            // Read the output of the command
             BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
             String line;
             while ((line = reader.readLine()) != null) {
@@ -524,6 +623,103 @@ public class awsTest {
 		System.out.printf("Successfully deleted tag [%s=%s] from instance %s\n", tagKey, tagValue, instanceId);
 	}
 
+
+
+
+	public static void getEC2CPUUtilization(String instanceId) {
+		System.out.println("Getting CPU Utilization for instance: " + instanceId);
+		
+		long offsetInMilliseconds = 1000 * 60 * 60; // 1 hour
+		Date endTime = new Date();
+		Date startTime = new Date(endTime.getTime() - offsetInMilliseconds);
+
+		GetMetricStatisticsRequest request = new GetMetricStatisticsRequest()
+				.withStartTime(startTime)
+				.withEndTime(endTime)
+				.withPeriod(300) // 5분 간격 (300초)
+				.withMetricName("CPUUtilization")
+				.withNamespace("AWS/EC2")
+				.withStatistics(Statistic.Average)
+				.withDimensions(new com.amazonaws.services.cloudwatch.model.Dimension()
+						.withName("InstanceId")
+						.withValue(instanceId));
+
+		GetMetricStatisticsResult getMetricStatisticsResult = cloudWatch.getMetricStatistics(request);
+		List<Datapoint> datapoints = getMetricStatisticsResult.getDatapoints();
+
+		if (datapoints.isEmpty()) {
+			System.out.println("No CPU utilization data found for the given time period.");
+		} else {
+			for (Datapoint dp : datapoints) {
+				System.out.printf("Time: %s, Average CPU Utilization: %.2f%%\n", dp.getTimestamp().toString(), dp.getAverage());
+			}
+		}
+	}
+
+
+	public static void createCPUAlarmForInstance(String instanceId, String alarmName, double threshold) {
+		System.out.printf("Creating alarm: %s for instance: %s with threshold: %.2f%%\n", alarmName, instanceId, threshold);
+
+		PutMetricAlarmRequest putMetricAlarmRequest = new PutMetricAlarmRequest()
+				.withAlarmName(alarmName)
+				.withMetricName("CPUUtilization")
+				.withNamespace("AWS/EC2")
+				.withStatistic(Statistic.Average)
+				.withPeriod(300)
+				.withEvaluationPeriods(1)
+				.withThreshold(threshold)
+				.withComparisonOperator("GreaterThanThreshold")
+				.withDimensions(new Dimension().withName("InstanceId").withValue(instanceId))
+				.withUnit(StandardUnit.Percent);
+
+		cloudWatch.putMetricAlarm(putMetricAlarmRequest);
+		System.out.println("Alarm created successfully. Check CloudWatch console for the alarm status.");
+	}
+
+
+	public static void checkAlarmState(String alarmName) {
+		System.out.println("Checking alarm state for: " + alarmName);
+		DescribeAlarmsRequest request = new DescribeAlarmsRequest().withAlarmNames(alarmName);
+		DescribeAlarmsResult result = cloudWatch.describeAlarms(request);
+
+		if (!result.getMetricAlarms().isEmpty()) {
+			MetricAlarm alarm = result.getMetricAlarms().get(0);
+			String state = alarm.getStateValue();
+			System.out.println("Alarm State: " + state);
+			if (state.equalsIgnoreCase("ALARM")) {
+				System.out.println("**ALARM TRIGGERED** The metric has exceeded the threshold!");
+			}
+		} else {
+			System.out.println("Alarm not found.");
+		}
+	}
+
+
+	public static void listAlarms() {
+		System.out.println("Listing all alarms...");
+		DescribeAlarmsRequest request = new DescribeAlarmsRequest();
+		DescribeAlarmsResult result = cloudWatch.describeAlarms(request);
+
+		List<MetricAlarm> alarms = result.getMetricAlarms();
+		if (alarms.isEmpty()) {
+			System.out.println("No alarms found.");
+		} else {
+			for (MetricAlarm alarm : alarms) {
+				System.out.printf("Alarm Name: %s, State: %s, Metric: %s, Threshold: %.2f\n",
+						alarm.getAlarmName(),
+						alarm.getStateValue(),
+						alarm.getMetricName(),
+						alarm.getThreshold());
+			}
+		}
+	}
+
+
+	public static void deleteAlarm(String alarmName) {
+		System.out.printf("Deleting alarm: %s\n", alarmName);
+		cloudWatch.deleteAlarms(new DeleteAlarmsRequest().withAlarmNames(alarmName));
+		System.out.println("Alarm deleted successfully.");
+	}
 
 }
 	
