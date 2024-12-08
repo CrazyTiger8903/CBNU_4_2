@@ -35,10 +35,10 @@ import com.amazonaws.services.ec2.model.DescribeImagesResult;
 import com.amazonaws.services.ec2.model.Image;
 import com.amazonaws.services.ec2.model.Filter;
 
-// 태그 추가
 import com.amazonaws.services.ec2.model.Tag; 
 import com.amazonaws.services.ec2.model.CreateTagsRequest;
 import com.amazonaws.services.ec2.model.DeleteTagsRequest;  
+
 
 import com.amazonaws.services.cloudwatch.AmazonCloudWatch; 
 import com.amazonaws.services.cloudwatch.AmazonCloudWatchClientBuilder; 
@@ -56,10 +56,22 @@ import com.amazonaws.services.cloudwatch.model.MetricAlarm;
 import com.amazonaws.services.cloudwatch.model.Dimension; 
 import com.amazonaws.services.cloudwatch.model.DeleteAlarmsRequest;
 
+import com.amazonaws.services.ec2.model.DescribeVolumesRequest;
+import com.amazonaws.services.ec2.model.DescribeVolumesResult;
+import com.amazonaws.services.ec2.model.Volume;
+import com.amazonaws.services.ec2.model.CreateVolumeRequest;
+import com.amazonaws.services.ec2.model.AttachVolumeRequest;
+import com.amazonaws.services.ec2.model.DetachVolumeRequest;
+import com.amazonaws.services.ec2.model.DeleteVolumeRequest;
+import com.amazonaws.services.ec2.model.CreateSnapshotRequest;
+import com.amazonaws.services.ec2.model.DescribeSnapshotsRequest;
+import com.amazonaws.services.ec2.model.Snapshot;
+import com.amazonaws.services.ec2.model.DeleteSnapshotRequest;
+
+
 public class awsTest {
 
 	static AmazonEC2      ec2;
-	
 	static AmazonCloudWatch cloudWatch;
 	static AWSLogs awsLogs; 
 
@@ -77,10 +89,9 @@ public class awsTest {
 		}
 		ec2 = AmazonEC2ClientBuilder.standard()
 			.withCredentials(credentialsProvider)
-			.withRegion("us-east-1")	
+			.withRegion("us-east-1")	/* check the region at AWS console */
 			.build();
 
-		
 		cloudWatch = AmazonCloudWatchClientBuilder.standard()
 				.withCredentials(credentialsProvider)
 				.withRegion("us-east-1")
@@ -120,6 +131,15 @@ public class awsTest {
 			System.out.println(" 33. check alarm state                                          "); 
 			System.out.println(" 34. list alarms                                             "); 
 			System.out.println(" 35. delete alarm                                            "); 
+			System.out.println(" 40. list volumes                                              ");
+			System.out.println(" 41. create volume                                             ");
+			System.out.println(" 42. attach volume to instance                                 ");
+			System.out.println(" 43. detach volume                                             ");
+			System.out.println(" 44. delete volume                                             ");
+			System.out.println(" 45. create snapshot                                           ");
+			System.out.println(" 46. list snapshots                                            ");
+			System.out.println(" 47. delete snapshot                                           ");
+			System.out.println(" 48. create volume from snapshot                               ");
 			System.out.println("                                  99. quit                     ");
 			System.out.println("--------------------------------------------------------------");
 			
@@ -189,7 +209,6 @@ public class awsTest {
 				listImages();
 				break;
 
-			// condor_status 실행
 			case 9: 
 				System.out.print("Enter instance id: ");
 				if (id_string.hasNext())
@@ -212,7 +231,6 @@ public class awsTest {
 				}
 				break;
 				
-		
 			case 11:
 				System.out.print("Enter instance id: ");
 				String tagAddInstanceId = id_string.nextLine().trim();
@@ -228,7 +246,6 @@ public class awsTest {
 				}
 				break;
 				
-	
 			case 12:
 				System.out.print("Enter instance id: ");
 				String tagDelInstanceId = id_string.nextLine().trim();
@@ -243,10 +260,7 @@ public class awsTest {
 					System.out.println("Instance id or tag key/value is empty. Returning to main menu.");
 				}
 				break;
-		
 				
-
-			
 			case 30:
 				System.out.print("Enter instance id for CPU metric: ");
 				String metricInstanceId = id_string.nextLine().trim();
@@ -277,7 +291,7 @@ public class awsTest {
 				}
 				break;
 
-			case 33:
+			case 33: 
 				System.out.print("Enter alarm name: ");
 				String checkAlarmName = id_string.nextLine().trim();
 				if (!checkAlarmName.isEmpty()) {
@@ -301,7 +315,101 @@ public class awsTest {
 				}
 				break;
 			
+		
+			case 40:
+				listVolumes();
+				break;
 
+			case 41:
+				System.out.print("Enter availability zone (e.g., us-east-1a): ");
+				String az = id_string.nextLine().trim();
+				System.out.print("Enter volume size in GiB: ");
+				String sizeStr = id_string.nextLine().trim();
+				if(!az.isEmpty() && !sizeStr.isEmpty()) {
+					try {
+						int sizeGiB = Integer.parseInt(sizeStr);
+						createVolume(az, sizeGiB);
+					} catch(NumberFormatException e) {
+						System.out.println("Invalid size input.");
+					}
+				} else {
+					System.out.println("Missing parameters.");
+				}
+				break;
+
+			case 42:
+				System.out.print("Enter volume id: ");
+				String volIdAttach = id_string.nextLine().trim();
+				System.out.print("Enter instance id: ");
+				String instIdAttach = id_string.nextLine().trim();
+				System.out.print("Enter device name (e.g. /dev/sdf): ");
+				String device = id_string.nextLine().trim();
+				if(!volIdAttach.isEmpty() && !instIdAttach.isEmpty() && !device.isEmpty()) {
+					attachVolume(volIdAttach, instIdAttach, device);
+				} else {
+					System.out.println("Missing parameters.");
+				}
+				break;
+
+			case 43:
+				System.out.print("Enter volume id to detach: ");
+				String volIdDetach = id_string.nextLine().trim();
+				if(!volIdDetach.isEmpty()) {
+					detachVolume(volIdDetach);
+				} else {
+					System.out.println("Volume id is empty.");
+				}
+				break;
+
+			case 44:
+				System.out.print("Enter volume id to delete: ");
+				String volIdDelete = id_string.nextLine().trim();
+				if(!volIdDelete.isEmpty()) {
+					deleteVolume(volIdDelete);
+				} else {
+					System.out.println("Volume id is empty.");
+				}
+				break;
+
+			case 45:
+				System.out.print("Enter volume id to snapshot: ");
+				String volIdSnap = id_string.nextLine().trim();
+				System.out.print("Enter snapshot description: ");
+				String snapDesc = id_string.nextLine().trim();
+				if(!volIdSnap.isEmpty() && !snapDesc.isEmpty()) {
+					createSnapshot(volIdSnap, snapDesc);
+				} else {
+					System.out.println("Missing parameters.");
+				}
+				break;
+
+			case 46:
+				listSnapshots();
+				break;
+
+			case 47:
+				System.out.print("Enter snapshot id to delete: ");
+				String snapIdDel = id_string.nextLine().trim();
+				if(!snapIdDel.isEmpty()) {
+					deleteSnapshot(snapIdDel);
+				} else {
+					System.out.println("Snapshot id is empty.");
+				}
+				break;
+
+			case 48:
+				System.out.print("Enter snapshot id to create volume from: ");
+				String snapIdVol = id_string.nextLine().trim();
+				System.out.print("Enter availability zone: ");
+				String azVol = id_string.nextLine().trim();
+				if(!snapIdVol.isEmpty() && !azVol.isEmpty()) {
+					createVolumeFromSnapshot(snapIdVol, azVol);
+				} else {
+					System.out.println("Missing parameters.");
+				}
+				break;
+
+				
 			case 99: 
 				System.out.println("bye!");
 				menu.close();
@@ -338,7 +446,7 @@ public class awsTest {
 						instance.getState().getName(),
 						instance.getMonitoring().getState());
 
-					
+				
 					if (instance.getTags() != null && !instance.getTags().isEmpty()) {
 						System.out.print(", [tags] ");
 						for (int i = 0; i < instance.getTags().size(); i++) {
@@ -517,19 +625,17 @@ public class awsTest {
 
 
 
-
 	private static String getPublicDns(String instanceId) {
         DescribeInstancesRequest request = new DescribeInstancesRequest().withInstanceIds(instanceId);
         DescribeInstancesResult response = ec2.describeInstances(request);
 
         for (Reservation reservation : response.getReservations()) {
             for (Instance instance : reservation.getInstances()) {
-                return instance.getPublicDnsName(); // Return the Public DNS of the instance
+                return instance.getPublicDnsName(); 
             }
         }
         return null;
     }
-
 
     private static void executeCondorStatus(String instanceId) {
         try {
@@ -541,19 +647,16 @@ public class awsTest {
 
             System.out.println("Connecting to instance: " + publicDns);
 
-
 			ProcessBuilder processBuilder = new ProcessBuilder(
 				"ssh", "-i", "key.pem",
-				"-o", "StrictHostKeyChecking=no", 
+				"-o", "StrictHostKeyChecking=no",
 				"ec2-user@" + publicDns,
 				"condor_status"
 			);
-
 			
             processBuilder.redirectErrorStream(true);
             Process process = processBuilder.start();
 
-            // Read the output of the command
             BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
             String line;
             while ((line = reader.readLine()) != null) {
@@ -572,7 +675,6 @@ public class awsTest {
     }
 
 
-	// 태그
 	public static void listInstancesByTag(String key, String value) {
 		System.out.printf("Listing instances with tag [%s=%s]....\n", key, value);
 
@@ -624,19 +726,17 @@ public class awsTest {
 	}
 
 
-
-
 	public static void getEC2CPUUtilization(String instanceId) {
 		System.out.println("Getting CPU Utilization for instance: " + instanceId);
 		
-		long offsetInMilliseconds = 1000 * 60 * 60; // 1 hour
+		long offsetInMilliseconds = 1000 * 60 * 60; 
 		Date endTime = new Date();
 		Date startTime = new Date(endTime.getTime() - offsetInMilliseconds);
 
 		GetMetricStatisticsRequest request = new GetMetricStatisticsRequest()
 				.withStartTime(startTime)
 				.withEndTime(endTime)
-				.withPeriod(300) // 5분 간격 (300초)
+				.withPeriod(300) 
 				.withMetricName("CPUUtilization")
 				.withNamespace("AWS/EC2")
 				.withStatistics(Statistic.Average)
@@ -676,7 +776,6 @@ public class awsTest {
 		System.out.println("Alarm created successfully. Check CloudWatch console for the alarm status.");
 	}
 
-
 	public static void checkAlarmState(String alarmName) {
 		System.out.println("Checking alarm state for: " + alarmName);
 		DescribeAlarmsRequest request = new DescribeAlarmsRequest().withAlarmNames(alarmName);
@@ -714,11 +813,118 @@ public class awsTest {
 		}
 	}
 
-
 	public static void deleteAlarm(String alarmName) {
 		System.out.printf("Deleting alarm: %s\n", alarmName);
 		cloudWatch.deleteAlarms(new DeleteAlarmsRequest().withAlarmNames(alarmName));
 		System.out.println("Alarm deleted successfully.");
+	}
+
+
+
+
+
+
+
+
+	public static void listVolumes() {
+		System.out.println("Listing EBS volumes...");
+		DescribeVolumesResult result = ec2.describeVolumes(new DescribeVolumesRequest());
+		List<Volume> volumes = result.getVolumes();
+		if (volumes.isEmpty()) {
+			System.out.println("No volumes found.");
+		} else {
+			for (Volume vol : volumes) {
+				System.out.printf("VolumeId: %s, Size: %dGB, State: %s, Type: %s, AZ: %s\n",
+						vol.getVolumeId(),
+						vol.getSize(),
+						vol.getState(),
+						vol.getVolumeType(),
+						vol.getAvailabilityZone());
+			}
+		}
+	}
+
+
+	public static void createVolume(String availabilityZone, int sizeGiB) {
+		System.out.printf("Creating volume in AZ: %s, Size: %dGB\n", availabilityZone, sizeGiB);
+		CreateVolumeRequest request = new CreateVolumeRequest()
+				.withAvailabilityZone(availabilityZone)
+				.withSize(sizeGiB)
+				.withVolumeType("gp2");
+		Volume volume = ec2.createVolume(request).getVolume();
+		System.out.printf("Created volume: %s\n", volume.getVolumeId());
+	}
+
+
+	public static void attachVolume(String volumeId, String instanceId, String device) {
+		System.out.printf("Attaching volume %s to instance %s at device %s\n", volumeId, instanceId, device);
+		AttachVolumeRequest request = new AttachVolumeRequest()
+				.withVolumeId(volumeId)
+				.withInstanceId(instanceId)
+				.withDevice(device);
+		ec2.attachVolume(request);
+		System.out.println("Volume attached successfully.");
+	}
+
+
+	public static void detachVolume(String volumeId) {
+		System.out.printf("Detaching volume %s\n", volumeId);
+		DetachVolumeRequest request = new DetachVolumeRequest()
+				.withVolumeId(volumeId);
+		ec2.detachVolume(request);
+		System.out.println("Volume detached successfully.");
+	}
+
+
+	public static void deleteVolume(String volumeId) {
+		System.out.printf("Deleting volume %s\n", volumeId);
+		DeleteVolumeRequest request = new DeleteVolumeRequest().withVolumeId(volumeId);
+		ec2.deleteVolume(request);
+		System.out.println("Volume deleted successfully.");
+	}
+
+
+	public static void createSnapshot(String volumeId, String description) {
+		System.out.printf("Creating snapshot for volume %s with description '%s'\n", volumeId, description);
+		CreateSnapshotRequest request = new CreateSnapshotRequest()
+				.withVolumeId(volumeId)
+				.withDescription(description);
+		String snapshotId = ec2.createSnapshot(request).getSnapshot().getSnapshotId();
+		System.out.printf("Created snapshot: %s\n", snapshotId);
+	}
+
+	public static void listSnapshots() {
+		System.out.println("Listing snapshots...");
+		DescribeSnapshotsRequest request = new DescribeSnapshotsRequest().withOwnerIds("self");
+
+		List<Snapshot> snapshots = ec2.describeSnapshots(request).getSnapshots();
+		if (snapshots.isEmpty()) {
+			System.out.println("No snapshots found.");
+		} else {
+			for (Snapshot snap : snapshots) {
+				System.out.printf("SnapshotId: %s, VolumeId: %s, State: %s, StartTime: %s\n",
+						snap.getSnapshotId(),
+						snap.getVolumeId(),
+						snap.getState(),
+						snap.getStartTime().toString());
+			}
+		}
+	}
+
+	public static void deleteSnapshot(String snapshotId) {
+		System.out.printf("Deleting snapshot %s\n", snapshotId);
+		DeleteSnapshotRequest request = new DeleteSnapshotRequest().withSnapshotId(snapshotId);
+		ec2.deleteSnapshot(request);
+		System.out.println("Snapshot deleted successfully.");
+	}
+
+	public static void createVolumeFromSnapshot(String snapshotId, String availabilityZone) {
+		System.out.printf("Creating volume from snapshot %s in AZ %s\n", snapshotId, availabilityZone);
+		CreateVolumeRequest request = new CreateVolumeRequest()
+				.withSnapshotId(snapshotId)
+				.withAvailabilityZone(availabilityZone);
+		Volume volume = ec2.createVolume(request).getVolume();
+		System.out.printf("Created volume from snapshot: %s\n", volume.getVolumeId());
 	}
 
 }
